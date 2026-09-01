@@ -1,1 +1,39 @@
+name: Refresh X List M3U Playlist
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install playwright
+        playwright install chromium
+
+    - name: Run Scraper Script
+      run: python x_list_to_m3u.py
+
+    - name: Commit and Push changes safely
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "Automated update of X video playlist"
+        file_pattern: 'x_video_playlist.m3u'
