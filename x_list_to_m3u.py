@@ -3,7 +3,7 @@ import os
 from playwright.sync_api import sync_playwright
 
 # --- CONFIGURATION ---
-X_LIST_URL = "https://x.com/i/lists/1814228268662587775"  # <-- Ensure your list ID is here
+X_LIST_URL = "https://x.com/i/lists/1814228268662587775" 
 OUTPUT_FILENAME = "x_video_playlist.m3u"
 SCROLL_DURATION = 20 
 # ---------------------
@@ -11,7 +11,6 @@ SCROLL_DURATION = 20
 def extract_video_links():
     video_urls = []
     
-    # Retrieve securely hidden cookies from GitHub Environment
     auth_token = os.environ.get("X_AUTH_TOKEN")
     ct0 = os.environ.get("X_CT0")
 
@@ -22,33 +21,43 @@ def extract_video_links():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
         
-        # Inject cookies to simulate an active, logged-in user session
-        context.add_cookies([
-            {"name": "auth_token", "value": auth_token, "domain": ".x.com", "path": "/"},
-            {"name": "ct0", "value": ct0, "domain": ".x.com", "path": "/"}
-        ])
-        
+        # FIX: Duplicate cookies across all x.com and twitter.com domain variants
+        # This prevents X from ignoring the session state on initial redirect
+        domains = [".x.com", "x.com", ".twitter.com", "twitter.com"]
+        cookie_list = []
+        for domain in domains:
+            cookie_list.append({"name": "auth_token", "value": auth_token, "domain": domain, "path": "/"})
+            cookie_list.append({"name": "ct0", "value": ct0, "domain": domain, "path": "/"})
+            
+        context.add_cookies(cookie_list)
         page = context.new_page()
         
         print(f"Opening X List securely: {X_LIST_URL}")
         page.goto(X_LIST_URL)
-        page.wait_for_timeout(7000)  # Give the authenticated timeline time to load
+        page.wait_for_timeout(5000)
+        
+        # FORCE RELOAD: Ensures the browser uses the newly injected cookies if stuck on login wall
+        if "Sign in" in page.content() or "Happening now" in page.content():
+            print("Authentication wall encountered. Forcing page refresh with active session...")
+            page.reload()
+            page.wait_for_timeout(7000)
         
         discovered_videos = {}
         
         def handle_response(response):
             url = response.url
-            if "://twimg.com" in url and (".m3u8" in url or ".mp4" in url):
+            # X stores media files across twimg.com and x.com CDNs
+            if ("twimg.com" in url or "x.com" in url) and (".m3u8" in url or ".mp4" in url):
                 base_url = url.split("?")[0]
                 if base_url not in discovered_videos:
                     discovered_videos[base_url] = url
 
         page.on("response", handle_response)
 
-        # Scroll to discover video posts
+        # Scroll down to pull lazy-loaded video network files
         start_time = time.time()
         while time.time() - start_time < SCROLL_DURATION:
             page.evaluate("window.scrollBy(0, 1000);")
@@ -61,11 +70,10 @@ def extract_video_links():
 
 def generate_m3u(urls):
     if not urls:
-        print("No videos found. Verify your cookies are valid and your List contains active video tweets.")
-        # Create a placeholder track so the Apple TV app doesn't throw a parsing error
+        print("No videos found. Creating emergency placeholder entry.")
         with open(OUTPUT_FILENAME, "w", encoding="utf-8") as f:
             f.write("#EXTM3U\n")
-            f.write("#EXTINF:-1, No Videos Found - Check Logs\n")
+            f.write("#EXTINF:-1, No Videos Found - Check Session Cookies\n")
             f.write("https://localhost/placeholder.mp4\n")
         return
 
