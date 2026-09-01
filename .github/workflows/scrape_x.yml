@@ -1,5 +1,8 @@
 name: Refresh X List M3U Playlist
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   schedule:
     # This runs the script every 12 hours (at 00:00 and 12:00 UTC)
