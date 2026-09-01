@@ -30,10 +30,8 @@ jobs:
         playwright install chromium
 
     - name: Run Scraper Script
+      env:
+        X_AUTH_TOKEN: ${{ secrets.X_AUTH_TOKEN }}
+        X_CT0: ${{ secrets.X_CT0 }}
       run: python x_list_to_m3u.py
 
-    - name: Commit and Push changes safely
-      uses: stefanzweifel/git-auto-commit-action@v5
-      with:
-        commit_message: "Automated update of X video playlist"
-        file_pattern: 'x_video_playlist.m3u'
