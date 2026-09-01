@@ -33,9 +33,10 @@ jobs:
       run: python x_list_to_m3u.py
 
     - name: Commit and Push updated M3U file
+      env:
+       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
         git add x_video_playlist.m3u
-        # Only commit if the file actually changed to avoid empty errors
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Automated update of X video playlist" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Automated update of X video playlist" && git push "https://x-access-token:${GITHUB_TOKEN}@://github.com{{ github.repository }}.git" HEAD:${{ github.ref_name }})
