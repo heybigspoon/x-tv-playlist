@@ -1,56 +1,57 @@
 import time
-import re
+import os
 from playwright.sync_api import sync_playwright
 
 # --- CONFIGURATION ---
-# Replace this with your public X List URL
-X_LIST_URL = "https://x.com/i/lists/1814228268662587775" 
-# The filename that you will upload to the cloud
+X_LIST_URL = "https://x.com/i/lists/1814228268662587775"  # <-- Ensure your list ID is here
 OUTPUT_FILENAME = "x_video_playlist.m3u"
-# How many seconds to scroll down to collect videos (increase for more videos)
-SCROLL_DURATION = 15 
+SCROLL_DURATION = 20 
 # ---------------------
 
 def extract_video_links():
     video_urls = []
     
+    # Retrieve securely hidden cookies from GitHub Environment
+    auth_token = os.environ.get("X_AUTH_TOKEN")
+    ct0 = os.environ.get("X_CT0")
+
+    if not auth_token or not ct0:
+        print("CRITICAL ERROR: GitHub Secrets (X_AUTH_TOKEN or X_CT0) are missing!")
+        return []
+
     with sync_playwright() as p:
-        # Launch a headless browser (runs in the background)
         browser = p.chromium.launch(headless=True)
-        # Emulate a standard desktop user agent to avoid instant blocking
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
+        
+        # Inject cookies to simulate an active, logged-in user session
+        context.add_cookies([
+            {"name": "auth_token", "value": auth_token, "domain": ".x.com", "path": "/"},
+            {"name": "ct0", "value": ct0, "domain": ".x.com", "path": "/"}
+        ])
+        
         page = context.new_page()
         
-        print(f"Opening X List: {X_LIST_URL}")
+        print(f"Opening X List securely: {X_LIST_URL}")
         page.goto(X_LIST_URL)
+        page.wait_for_timeout(7000)  # Give the authenticated timeline time to load
         
-        # Wait for the timeline to load initial tweets
-        page.wait_for_timeout(5000)
-        
-        print("Scrolling and intercepting video network requests...")
-        
-        # Dictionary to store unique videos we discover
         discovered_videos = {}
         
-        # Set up a network listener. X streams video via .m3u8 (HLS) or .mp4 files.
-        # We listen to the network traffic while scrolling to catch the true video URLs.
         def handle_response(response):
             url = response.url
-            # Target video streams (://twimg.com handles X/Twitter media)
             if "://twimg.com" in url and (".m3u8" in url or ".mp4" in url):
-                # Clean up tracking tokens to find the base stream identifier
                 base_url = url.split("?")[0]
                 if base_url not in discovered_videos:
                     discovered_videos[base_url] = url
 
         page.on("response", handle_response)
 
-        # Slowly scroll down the page to force lazy-loaded videos to trigger network calls
+        # Scroll to discover video posts
         start_time = time.time()
         while time.time() - start_time < SCROLL_DURATION:
-            page.evaluate("window.scrollBy(0, 800);")
+            page.evaluate("window.scrollBy(0, 1000);")
             page.wait_for_timeout(1500)
             
         browser.close()
@@ -60,18 +61,18 @@ def extract_video_links():
 
 def generate_m3u(urls):
     if not urls:
-        print("No video URLs were found. Ensure the X List is public and has recent video posts.")
+        print("No videos found. Verify your cookies are valid and your List contains active video tweets.")
+        # Create a placeholder track so the Apple TV app doesn't throw a parsing error
+        with open(OUTPUT_FILENAME, "w", encoding="utf-8") as f:
+            f.write("#EXTM3U\n")
+            f.write("#EXTINF:-1, No Videos Found - Check Logs\n")
+            f.write("https://localhost/placeholder.mp4\n")
         return
 
     with open(OUTPUT_FILENAME, "w", encoding="utf-8") as f:
-        # Write the required M3U IPTV header
         f.write("#EXTM3U\n")
-        
         for i, url in enumerate(urls, start=1):
-            # Clean up URL encoding artifacts if present
             clean_url = url.replace("&amp;", "&")
-            
-            # Format each entry with metadata for the Apple TV app
             f.write(f"#EXTINF:-1 tvg-id=\"X_{i}\" tvg-name=\"X Video {i}\", X Video {i}\n")
             f.write(f"{clean_url}\n")
             
