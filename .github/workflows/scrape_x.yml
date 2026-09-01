@@ -5,14 +5,15 @@ env:
 
 on:
   schedule:
-    # This runs the script every 12 hours (at 00:00 and 12:00 UTC)
     - cron: '0 */12 * * *'
   workflow_dispatch:
-    # This adds a manual "Run now" button in the GitHub dashboard for testing
 
 jobs:
   scrape-and-update:
     runs-on: ubuntu-latest
+    # This explicitly forces the job to use your write permissions
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repository code
@@ -33,10 +34,8 @@ jobs:
       run: python x_list_to_m3u.py
 
     - name: Commit and Push updated M3U file
-      env:
-       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@://github.com"
         git add x_video_playlist.m3u
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Automated update of X video playlist" && git push "https://x-access-token:${GITHUB_TOKEN}@://github.com{{ github.repository }}.git" HEAD:${{ github.ref_name }})
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Automated update of X video playlist" && git push)
